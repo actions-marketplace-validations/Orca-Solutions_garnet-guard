@@ -135,13 +135,16 @@ _DOCS: tuple[RuleDoc, ...] = (
         "new-build-hook",
         "diff",
         W,
-        "setup.py gained sensitive calls, the build backend changed to an unknown or in-tree backend, "
-        "or an npm preinstall, install or postinstall script was added or changed.",
+        "setup.py gained sensitive calls or gave one it already made different arguments, the build "
+        "backend changed to an unknown or in-tree backend, or an npm preinstall, install or "
+        "postinstall script was added or changed. Arguments are compared as written, with keyword "
+        "order and formatting left out; a variable is compared by its name, not its value.",
         "Code in setup.py, a custom build backend or an npm install script runs on your machine when "
         "the package is built or installed, before you ever import it. nx 21.5.0 and "
         "@ctrl/tinycolor 4.1.1 (Shai-Hulud) carried their payload in a postinstall script.",
-        "Read the setup.py diff, the new backend, or the npm script and the file it runs. Prefer "
-        "installing the wheel if one exists; on npm, `npm install --ignore-scripts` skips the scripts.",
+        "Read the setup.py diff, the new backend, or the npm script and the file it runs; for "
+        "changed arguments the evidence shows the call before and after. Prefer installing the "
+        "wheel if one exists; on npm, `npm install --ignore-scripts` skips the scripts.",
     ),
     RuleDoc(
         "GRN-C003",
@@ -180,6 +183,36 @@ _DOCS: tuple[RuleDoc, ...] = (
         "there explains a binary, or the file's name hides what it is, don't merge. Bytecode in "
         "__pycache__ can be left over from a build, but Python may run it rather than the .py "
         "beside it: ask the maintainers to drop it from the wheel.",
+    ),
+    RuleDoc(
+        "GRN-C005",
+        "obfuscated-blob",
+        "diff",
+        Severity.OFF,
+        "Code that runs at import gains encoded data or a lookup by a name the source "
+        "doesn't hold: a hex, base64 or base85 literal of more than 2,048 characters, or "
+        "binary bytes, over the entropy threshold (from 256 characters when passed to a "
+        "decoder; PEM blocks don't count on their own); exec, eval, compile, marshal.loads or "
+        "pickle.loads run on a value built from literals with a decoder, chr(), slicing or "
+        "xor; getattr, __import__, import_module or sys.modules given a name built that way, "
+        "or by concatenation, formatting or join into a sensitive name; or os, sys, builtins, "
+        "ctypes or importlib looked up by a name not written in "
+        "the source (getattr(os, name), vars(os)[name], sys.modules[name]). Test files and "
+        "sdist files outside the package are left out, as in GRN-C003. Python only.",
+        "Encoding a payload, or building the name of the call it makes, hides it from a "
+        'reviewer and from rules that match names: GRN-C003 reads getattr(os, "system") but '
+        'not getattr(os, "".join(map(chr, codes))). Packages also embed data (certificates, '
+        "fonts, compressed tables) and look names up in plugin loaders and compatibility "
+        "shims, so this rule reports only what the trusted version didn't have. It is off by "
+        "default: reading these sites costs about as much again as every other check, and on "
+        "1,000 everyday packages it found protobuf blobs and lazy importers, nothing hidden; "
+        'turn it on with "GRN-C005" = "info" in [garnet.rules] when a package is worth the '
+        "wait. The 52 replayed incidents are all caught without it.",
+        "Open the line the evidence names. Find out what the literal decodes to and where it "
+        "goes, or which names the lookup can reach, with a separate tool: never by importing "
+        "the package. Data that is only read is usually fine. Code decoded and run at import, "
+        "or a sensitive call reached through a built name, that the repository at the "
+        "release's tag doesn't explain is a reason not to merge.",
     ),
     RuleDoc(
         "GRN-C006",
@@ -403,4 +436,4 @@ DOCS: dict[str, RuleDoc] = {d.rule_id: d for d in _DOCS}
 
 # Rules in the SPEC §6.2 catalog that aren't built yet. A policy may already
 # name them; they produce no findings until they ship.
-PLANNED: frozenset[str] = frozenset({"GRN-C005"})
+PLANNED: frozenset[str] = frozenset()
